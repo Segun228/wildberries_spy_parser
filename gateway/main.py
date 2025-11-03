@@ -8,9 +8,9 @@ from .middleware.logs import LoggingMiddleware
 from .middleware.rate_limiter import RateLimiter
 app = FastAPI(title="API Gateway")
 
-app.add_middleware(RateLimiter)
-app.add_middleware(LoggingMiddleware)
-app.add_middleware(AuthMiddleware)
+# app.add_middleware(RateLimiter)
+# app.add_middleware(LoggingMiddleware)
+# app.add_middleware(AuthMiddleware)
 
 
 SERVICES = {
