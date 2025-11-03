@@ -2,12 +2,16 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 import dj_database_url  # type: ignore
+from datetime import timedelta
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+}
 
 key = os.getenv("SECRET_KEY")
 if not key:
@@ -36,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    "corsheaders",
     "api",
     "kafka_broker"
     "redis_client",

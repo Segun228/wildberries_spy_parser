@@ -90,6 +90,41 @@ class UserRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
         return self.partial_update(request, *args, **kwargs)
 
 
+class UserTelegramListCreateView(ListCreateAPIView):
+    serializer_class = UserSerializer
+    queryset = User.objects.all()
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        telegram_id = request.data.get('telegram_id')
+        try:
+            user = User.objects.get(telegram_id=telegram_id)
+            serializer = self.get_serializer(user)
+            build_log_message(
+                is_authenticated=request.user.is_authenticated,
+                telegram_id=getattr(request.user, "telegram_id", None),
+                user_id=request.user.id,
+                action="login_user",
+                request_method=request.method,
+                response_code=200,
+                request_body=request.data,
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            pass
+            build_log_message(
+                is_authenticated=request.user.is_authenticated,
+                telegram_id=getattr(request.user, "telegram_id", None),
+                user_id=request.user.id,
+                action="register",
+                request_method=request.method,
+                response_code=201,
+                request_body=request.data,
+            )
+        return super().post(request, *args, **kwargs)
+
+
+
 class UserTelegramRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
     queryset = User.objects.all()

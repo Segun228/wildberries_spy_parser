@@ -1,13 +1,15 @@
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
-    SpectacularRedocView
+    SpectacularRedocView,
 )
+
 from django.contrib import admin
 from django.urls import path, include
 from users.urls import urlpatterns as auth_urls
 from api.urls import urlpatterns as api_urls
 
+from backend.views import HealthCheckView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -18,6 +20,7 @@ urlpatterns = [
     path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 
-    path('', include('django_prometheus.urls')),
+    path('prometheus/', include('django_prometheus.urls')),
+    path('', HealthCheckView.as_view(), name="healthcheck endpoint")
 ]
 
