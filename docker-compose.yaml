@@ -1,0 +1,322 @@
+
+services:
+  zookeeper_stats:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: zookeeper_stats
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  postgres:
+    image: postgres:14
+    container_name: postgres_stats
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    container_name: postgres_exporter_stats
+    ports:
+      - "9187:9187"
+    environment:
+      - DATA_SOURCE_NAME=postgresql://admin:admin@postgres_stats:5432/stats_platform?sslmode=disable
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin_stats
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${SUPERSET_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${SUPERSET_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+  kafka_stats:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka_stats
+    depends_on:
+      - zookeeper_stats
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper_stats:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_stats:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+
+  kafdrop_stats:
+    image: obsidiandynamics/kafdrop
+    container_name: kafdrop_stats
+    ports:
+      - "9001:9000"
+    environment:
+      KAFKA_BROKERCONNECT: ${KAFKA_BROKER_URL}
+      JVM_OPTS: "-Xms32M -Xmx64M"
+    depends_on:
+      - kafka_stats
+
+
+  backend:
+    image: stats_backend:latest
+    container_name: stats_backend
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - kafka_stats
+      - postgres
+      - redis
+
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse_stats
+    environment:
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB}
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    ports:
+      - "${CLICKHOUSE_PORT}:8123"
+      - "${CLICKHOUSE_SERVICE_PORT}:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    env_file:
+      - .env
+    restart: unless-stopped
+
+
+  bot:
+    image: stats_bot:latest
+    container_name: stats_bot
+    restart: unless-stopped
+    build: ./bot
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      - kafka_stats
+      - backend
+      - redis
+
+
+  analytics:
+    image: stats_analytics:latest
+    build: ./analytics
+    container_name: stats_analytics
+    ports:
+      - 8001:8001
+    env_file:
+      - .env
+    depends_on:
+      - kafka_stats
+      - backend
+      - bot
+      - clickhouse
+      - postgres
+
+
+  logs:
+    image: stats_logs:latest
+    build: ./logs
+    container_name: stats_logs
+    ports:
+      - 8002:8002
+    env_file:
+      - .env
+    depends_on:
+      - kafka_stats
+      - backend
+      - bot
+      - clickhouse
+      - postgres
+
+  redis:
+    image: redis:7
+    container_name: redis_stats
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+
+
+  clickhouse_ui:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse_ui
+    ports:
+      - "${CLICKHOUSE_UI_PORT}:8123"
+    environment:
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=default
+      - CLICKHOUSE_HTTP_PORT=8123
+      - CLICKHOUSE_LISTEN_HOST=0.0.0.0
+    depends_on:
+      - clickhouse
+
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node_exporter_stats
+    ports:
+      - "${NODE_EXPORTER_PORT}:9100"
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+
+  cadvisor:
+    image: zcube/cadvisor:latest
+    container_name: cadvisor_stats
+    ports:
+      - "${CADVISOR_PORT}:8080"
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: kafka_exporter_stats
+    ports:
+      - "${KAFKA_EXPORTER_PORT}:9308"
+    restart: unless-stopped
+    command:
+      - --kafka.server=${KAFKA_BROKER_URL}
+      - --web.listen-address=:9308
+      - --log.level=info
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis_exporter_stats
+    ports:
+      - "${REDIS_EXPORTER_PORT}:9121"
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=${REDIS_ADDR}
+
+  clickhouse-exporter:
+    image: flant/clickhouse-exporter:latest
+    container_name: clickhouse_exporter_spy
+    ports:
+      - "${CLICKHOUSE_EXPORTER_PORT}:9116"
+    restart: unless-stopped
+    environment:
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL}
+
+  superset:
+    image: apache/superset:latest
+    container_name: superset_spy
+    env_file:
+      - .env
+    environment:
+      - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY}
+    ports:
+      - "${SUPERSET_PORT}:8088"
+    volumes:
+      - superset_data:/app/superset_home
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  superset-init:
+    image: apache/superset:latest
+    container_name: superset_init_spy
+    env_file:
+      - .env
+    environment:
+      - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY}
+    volumes:
+      - superset_data:/app/superset_home
+    command: [
+        "sh", "-c",
+        "superset fab create-admin --username ${SUPERSET_USERNAME} --firstname ${POSTGRES_FIRSTNAME} --lastname ${POSTGRES_LASTNAME} --email ${SUPERSET_EMAIL} --password ${SUPERSET_PASSWORD} && superset db upgrade && superset init"
+      ]
+    depends_on:
+      - postgres
+    profiles:
+      - init
+
+volumes:
+  clickhouse_data:
+  redis_data:
+  grafana_data:
+  prometheus_data:
+  postgres_data:
+  superset_data:
+  dbeaver_data:
+
