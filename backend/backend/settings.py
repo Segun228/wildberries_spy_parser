@@ -88,6 +88,25 @@ DATABASES = {
 }
 
 
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'backend.authentication.CombinedAuthentication',
+    ],
+    
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+
+    'DATETIME_FORMAT': '%Y-%m-%d %H:%M:%S',
+    'TEST_REQUEST_DEFAULT_FORMAT': 'json',
+}
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {
