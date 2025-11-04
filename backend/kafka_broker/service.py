@@ -25,6 +25,8 @@ if not LOGS or LOGS.lower() in ("0", "false", "no", "nan", "", "n", "f"):
 else:
     LOGS = True
 
+KAFKA_RETRIES = int(os.getenv("KAFKA_RETRIES", 10))
+
 def ensure_topics_exists():
     load_dotenv()
     try:
@@ -32,7 +34,7 @@ def ensure_topics_exists():
             KAFKA_TOPIC = os.getenv(TOPIC_TYPE)
             if KAFKA_TOPIC is None or not KAFKA_TOPIC:
                 raise Exception(f"Topic {TOPIC_TYPE} was not found in env")
-            for i in range(10):
+            for i in range(KAFKA_RETRIES):
                 try:
                     admin_client = AdminClient({
                         'bootstrap.servers': KAFKA_BROKER_DOCKER
