@@ -1,21 +1,46 @@
+x-airflow-common:
+  &airflow-common
+  image: apache/airflow:2.8.1
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+    _PIP_ADDITIONAL_REQUIREMENTS: ''
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ./config:/opt/airflow/config
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    gateway:
+      condition: service_healthy
+
+
 
 services:
-  zookeeper_stats:
+  zookeeper_spy:
     image: confluentinc/cp-zookeeper:7.6.0
-    container_name: zookeeper_stats
+    container_name: zookeeper_spy
     environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_CLIENT_PORT: ${ZOOKEEPER_CLIENT_PORT}
       ZOOKEEPER_TICK_TIME: 2000
 
   postgres:
     image: postgres:14
-    container_name: postgres_stats
+    container_name: postgres_spy
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -26,79 +51,79 @@ services:
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter
-    container_name: postgres_exporter_stats
+    container_name: postgres_exporter_spy
     ports:
-      - "9187:9187"
+      - "${PG_EXPORTER_PORT}:9187"
     environment:
-      - DATA_SOURCE_NAME=postgresql://admin:admin@postgres_stats:5432/stats_platform?sslmode=disable
+      - DATA_SOURCE_NAME=postgresql://admin:admin@postgres_spy:5432/spy_platform?sslmode=disable
     restart: unless-stopped
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: pgadmin_stats
+    container_name: pgadmin_spy
     environment:
       PGADMIN_DEFAULT_EMAIL: ${SUPERSET_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${SUPERSET_PASSWORD}
     ports:
-      - "5050:80"
+      - "${PG_ADMIN_PORT}:80"
     depends_on:
       - postgres
 
-  kafka_stats:
+  kafka_spy:
     image: confluentinc/cp-kafka:7.6.0
-    container_name: kafka_stats
+    container_name: kafka_spy
     depends_on:
-      - zookeeper_stats
+      - zookeeper_spy
     ports:
-      - "9092:9092"
+      - "${KAFKA_PORT}:9092"
       - "29092:29092"
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper_stats:2181
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper_spy:2181
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_stats:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_spy:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:${KAFKA_PORT}", "--list"]
       interval: 10s
       timeout: 5s
       retries: 10
     restart: unless-stopped
 
 
-  kafdrop_stats:
+  kafdrop_spy:
     image: obsidiandynamics/kafdrop
-    container_name: kafdrop_stats
+    container_name: kafdrop_spy
     ports:
-      - "9001:9000"
+      - "${KAFDROP_PORT}:9000"
     environment:
       KAFKA_BROKERCONNECT: ${KAFKA_BROKER_URL}
       JVM_OPTS: "-Xms32M -Xmx64M"
     depends_on:
-      - kafka_stats
+      - kafka_spy
 
 
   backend:
-    image: stats_backend:latest
-    container_name: stats_backend
+    image: spy_backend:latest
+    container_name: spy_backend
     build: ./backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT}:8000"
     env_file:
       - .env
     depends_on:
-      - kafka_stats
+      - kafka_spy
       - postgres
       - redis
 
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
-    container_name: clickhouse_stats
+    container_name: clickhouse_spy
     environment:
       - CLICKHOUSE_USER=${CLICKHOUSE_USER}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
@@ -115,46 +140,79 @@ services:
 
 
   bot:
-    image: stats_bot:latest
-    container_name: stats_bot
+    image: spy_bot:latest
+    container_name: spy_bot
     restart: unless-stopped
     build: ./bot
     ports:
-      - "8080:8080"
+      - "${BOT_PORT}:8080"
     env_file:
       - .env
     depends_on:
-      - kafka_stats
+      - kafka_spy
       - backend
       - redis
 
 
-  analytics:
-    image: stats_analytics:latest
-    build: ./analytics
-    container_name: stats_analytics
+
+  logs:
+    image: spy_logs:latest
+    build: ./logs
+    container_name: spy_logs
     ports:
-      - 8001:8001
+      - ${LOGS_SERVICE_PORT}:8002
     env_file:
       - .env
     depends_on:
-      - kafka_stats
+      - kafka_spy
       - backend
       - bot
       - clickhouse
       - postgres
 
 
-  logs:
-    image: stats_logs:latest
-    build: ./logs
-    container_name: stats_logs
+  price_saver:
+    image: spy_price_saver:latest
+    build: ./price_saver
+    container_name: spy_price_saver
     ports:
-      - 8002:8002
+      - ${BOT_SAVER_PORT}:8002
     env_file:
       - .env
     depends_on:
-      - kafka_stats
+      - kafka_spy
+      - backend
+      - bot
+      - clickhouse
+      - postgres
+
+
+  parser:
+    image: spy_parser:latest
+    build: ./parser
+    container_name: spy_parser
+    ports:
+      - ${PARSER_PORT}:8000
+    env_file:
+      - .env
+    depends_on:
+      - kafka_spy
+      - backend
+      - bot
+      - clickhouse
+      - postgres
+
+
+  gateway:
+    image: spy_gateway:latest
+    build: ./gateway
+    container_name: spy_gateway
+    ports:
+      - ${GATEWAY_PORT}:8000
+    env_file:
+      - .env
+    depends_on:
+      - kafka_spy
       - backend
       - bot
       - clickhouse
@@ -162,7 +220,7 @@ services:
 
   redis:
     image: redis:7
-    container_name: redis_stats
+    container_name: redis_spy
     ports:
       - "${REDIS_PORT}:6379"
     volumes:
@@ -214,7 +272,7 @@ services:
 
   node-exporter:
     image: prom/node-exporter:latest
-    container_name: node_exporter_stats
+    container_name: node_exporter_spy
     ports:
       - "${NODE_EXPORTER_PORT}:9100"
     restart: unless-stopped
@@ -231,7 +289,7 @@ services:
 
   cadvisor:
     image: zcube/cadvisor:latest
-    container_name: cadvisor_stats
+    container_name: cadvisor_spy
     ports:
       - "${CADVISOR_PORT}:8080"
     restart: unless-stopped
@@ -245,7 +303,7 @@ services:
 
   kafka-exporter:
     image: danielqsj/kafka-exporter:latest
-    container_name: kafka_exporter_stats
+    container_name: kafka_exporter_spy
     ports:
       - "${KAFKA_EXPORTER_PORT}:9308"
     restart: unless-stopped
@@ -256,7 +314,7 @@ services:
 
   redis-exporter:
     image: oliver006/redis_exporter:latest
-    container_name: redis_exporter_stats
+    container_name: redis_exporter_spy
     ports:
       - "${REDIS_EXPORTER_PORT}:9121"
     restart: unless-stopped
@@ -310,6 +368,40 @@ services:
       - postgres
     profiles:
       - init
+
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "${AIRFLOW_WEBSERVER_PORT}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+
+  airflow-init:
+    <<: *airflow-common
+    command: version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_UPGRADE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: airflow
+      _AIRFLOW_WWW_USER_PASSWORD: airflow
+
 
 volumes:
   clickhouse_data:
