@@ -16,12 +16,24 @@ KAFKA_TOPIC = os.getenv("KAFKA_BACKEND_LOGS_TOPIC")
 PRODUCER_CLIENT_ID = os.getenv("PRODUCER_CLIENT_ID")
 
 LOGS = os.getenv("LOGS")
-if not LOGS or LOGS.lower() in ("0", "false", "no", "nan", "", "n", "f"):
-    LOGS = False
-else:
-    LOGS = True
+def env_string_decoder(s:str|None):
+    if s is None:
+        return False
+    if not s or s.lower() in ("1", "true", "yes", "yeah", "y", "yep", "t"):
+        return True
+    else:
+        return False
+
+KAFKA_RETRIES = int(os.getenv("KAFKA_RETRIES", 10))
+
+
 
 def ensure_topic_exists():
+    load_dotenv()
+    LOGS = env_string_decoder(os.getenv("LOGS"))
+    if not LOGS:
+        logging.info("Kafka logging is turned off")
+        return
     for i in range(10):
         try:
             admin_client = AdminClient({
@@ -160,7 +172,3 @@ def send_to_kafka(data):
     except Exception as e:
         logging.error(f"Failed to send to Kafka: {e}")
         return {"status": "failed", "error": str(e)}
-
-
-if LOGS:
-    ensure_topic_exists()

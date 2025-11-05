@@ -9,13 +9,16 @@ class MyAppConfig(AppConfig):
     def ready(self):
         load_dotenv()
         LOGS = os.getenv("LOGS")
-        if not LOGS or LOGS.lower() in ("0", "false", "no", "nan", ""):
+        if not LOGS or LOGS.lower() in ("1", "true", "yes", "yeah", "y", "yep", "t"):
+            LOGS = True
+        else:
             LOGS = False
-        from signals import signals
+        from app_signals import signals
         try:
-            from kafka_broker.utils import ensure_topic_exists
-            from kafka_broker.service import ensure_topics_exists
             if LOGS:
+                from kafka_broker.utils import ensure_topic_exists
+                from kafka_broker.service import ensure_topics_exists
+                ensure_topics_exists()
                 ensure_topic_exists()
         except Exception as e:
             logging.warning(f"Kafka topic creation skipped: {e}")

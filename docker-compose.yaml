@@ -1,3 +1,4 @@
+
 x-airflow-common:
   &airflow-common
   image: apache/airflow:2.8.1
@@ -171,7 +172,7 @@ services:
     build: ./logs
     container_name: spy_logs
     ports:
-      - ${LOGS_SERVICE_PORT}:8002
+      - ${LOGS_SERVICE_PORT}:8000
     env_file:
       - .env
     depends_on:
@@ -188,7 +189,7 @@ services:
     build: ./price_saver
     container_name: spy_price_saver
     ports:
-      - ${PRICE_SAVER_PORT}:8002
+      - ${PRICE_SAVER_PORT}:8000
     env_file:
       - .env
     depends_on:

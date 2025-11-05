@@ -20,16 +20,23 @@ SERVICE_TOPICS = {
 }
 
 LOGS = os.getenv("LOGS")
-if not LOGS or LOGS.lower() in ("0", "false", "no", "nan", "", "n", "f"):
-    LOGS = False
-else:
-    LOGS = True
+def env_string_decoder(s:str|None):
+    if s is None:
+        return False
+    if not s or s.lower() in ("1", "true", "yes", "yeah", "y", "yep", "t"):
+        return True
+    else:
+        return False
 
 KAFKA_RETRIES = int(os.getenv("KAFKA_RETRIES", 10))
 
 def ensure_topics_exists():
     load_dotenv()
+    LOGS = env_string_decoder(os.getenv("LOGS"))
     try:
+        if not LOGS:
+            logging.info("Kafka logging is turned off")
+            return
         for TOPIC_TYPE, KAFKA_TOPIC in SERVICE_TOPICS.items():
             KAFKA_TOPIC = os.getenv(TOPIC_TYPE)
             if KAFKA_TOPIC is None or not KAFKA_TOPIC:
@@ -39,7 +46,6 @@ def ensure_topics_exists():
                     admin_client = AdminClient({
                         'bootstrap.servers': KAFKA_BROKER_DOCKER
                     })
-
                     topic = NewTopic(
                         KAFKA_TOPIC,
                         num_partitions=1,
@@ -96,7 +102,6 @@ def delivery_report(err, msg):
         logging.debug(f'Message delivered to {msg.topic()} [{msg.partition()}]')
 
 
-if LOGS:
-    ensure_topics_exists()
+
 
 

@@ -24,9 +24,13 @@ if not debug:
     raise ValueError("No debug option provided")
 DEBUG = debug
 
+
+
 database = os.getenv("DATABASE_URL")
 
+
 ALLOWED_HOSTS = ["*"]
+
 
 AUTH_USER_MODEL = 'users.User'
 CORS_ALLOW_ALL_ORIGINS = True
@@ -42,7 +46,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "corsheaders",
     "api",
-    "kafka_broker"
+    "kafka_broker",
     "redis_client",
     "users"
 ]
@@ -80,11 +84,11 @@ TEMPLATES = [
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': dj_database_url.config(
+        default=database
+    )
 }
 
 

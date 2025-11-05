@@ -18,7 +18,7 @@ class SpyObject(models.Model):
 
 
 class SpyBrand(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="spy_objects")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="spy_brands")
     brand_id = models.IntegerField(null=False, blank=False)
     brand_name = models.CharField(max_length=100, null=False, blank=False)
     description = models.CharField(max_length=1000, null=True, blank=True, default="Описание распределения")
