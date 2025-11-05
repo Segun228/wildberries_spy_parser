@@ -21,8 +21,8 @@ x-airflow-common:
       condition: service_healthy
     gateway:
       condition: service_healthy
-
-
+    kafka_spy:
+      condition: service_healthy
 
 services:
   zookeeper_spy:
@@ -31,6 +31,11 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: ${ZOOKEEPER_CLIENT_PORT}
       ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost ${ZOOKEEPER_CLIENT_PORT} | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: postgres:14
@@ -119,7 +124,8 @@ services:
       - kafka_spy
       - postgres
       - redis
-
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT}/health"]
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
@@ -137,6 +143,11 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:${CLICKHOUSE_PORT}/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 
   bot:
@@ -166,9 +177,10 @@ services:
     depends_on:
       - kafka_spy
       - backend
-      - bot
       - clickhouse
       - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${LOGS_SERVICE_PORT}/health"]
 
 
   price_saver:
@@ -176,15 +188,16 @@ services:
     build: ./price_saver
     container_name: spy_price_saver
     ports:
-      - ${BOT_SAVER_PORT}:8002
+      - ${PRICE_SAVER_PORT}:8002
     env_file:
       - .env
     depends_on:
       - kafka_spy
       - backend
-      - bot
       - clickhouse
       - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PRICE_SAVER_PORT}/health"]
 
 
   parser:
@@ -198,9 +211,10 @@ services:
     depends_on:
       - kafka_spy
       - backend
-      - bot
       - clickhouse
       - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PARSER_PORT}/health"]
 
 
   gateway:
@@ -214,9 +228,12 @@ services:
     depends_on:
       - kafka_spy
       - backend
-      - bot
       - clickhouse
       - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${GATEWAY_PORT}/health"]
+
+
 
   redis:
     image: redis:7
@@ -225,6 +242,11 @@ services:
       - "${REDIS_PORT}:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 
   clickhouse_ui:

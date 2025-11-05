@@ -21,6 +21,6 @@ urlpatterns = [
     path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 
     path('prometheus/', include('django_prometheus.urls')),
-    path('', HealthCheckView.as_view(), name="healthcheck endpoint")
+    path('/health/', HealthCheckView.as_view(), name="healthcheck endpoint")
 ]
 

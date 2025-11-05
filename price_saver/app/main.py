@@ -4,12 +4,12 @@ import asyncio
 import os
 import logging
 from .kafka_consumer import KafkaEmailConsumer
-from .email_sender import send_email_async
+from .parsing import handle_parsing_request
 from dotenv import load_dotenv
 from fastapi import Response
 from prometheus_client import generate_latest, REGISTRY
-from .kafka_producer import build_log_message
-from .kafka_producer import ensure_topic_exists
+from .kafka_logs_producer import build_log_message
+from .kafka_logs_producer import ensure_topic_exists
 from prometheus_client import Counter, Histogram, generate_latest, REGISTRY
 
 load_dotenv()
@@ -19,7 +19,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
-KAFKA_EMAIL_SEND_TOPIC = os.getenv("KAFKA_EMAIL_SEND_TOPIC")
+KAFKA_PARSING_TOPIC = os.getenv("KAFKA_PARSING_TOPIC")
 
 
 REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'])
@@ -29,7 +29,7 @@ REQUEST_DURATION = Histogram('http_request_duration_seconds', 'HTTP request dura
 async def lifespan(app: FastAPI):
     logging.info("Postgres table ensured")
 
-    backend_consumer = KafkaEmailConsumer(KAFKA_EMAIL_SEND_TOPIC, send_email_async)
+    backend_consumer = KafkaEmailConsumer(KAFKA_PARSING_TOPIC, handle_parsing_request)
     await backend_consumer.start()
     logging.info("Kafka consumers started")
 
@@ -118,13 +118,12 @@ async def email_retrieve_update_destroy(request: Request):
 
 
 @app.get("/health/")
-async def health_ping():
+async def ping():
     return {"status": "ok", "service": "parser"}
 
 
-
 @app.get("/")
-async def ping(request: Request):
+async def main_route(request: Request):
     build_log_message(
         user_id = (await request.json()).get("id", None),
         is_authenticated = True,
@@ -138,5 +137,5 @@ async def ping(request: Request):
     )
     return {
         "status": "ok",
-        "text":"Kafka consumer is alive"
+        "text":"Parser service is alive"
     }

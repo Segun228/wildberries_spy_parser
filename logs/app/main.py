@@ -76,6 +76,11 @@ async def metrics():
     )
 
 
+@app.get("/health/")
+async def health_ping():
+    return {"status": "ok", "service": "parser"}
+
+
 
 @app.get("/")
 def ping():

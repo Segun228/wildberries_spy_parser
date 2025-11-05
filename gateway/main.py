@@ -82,3 +82,9 @@ def filter_headers(headers: dict) -> dict:
 async def log_metrics(path: str, status_code: int, duration: float):
     """Логирование метрик"""
     print(f"Metrics: {path} | Status: {status_code} | Duration: {duration:.3f}s")
+
+
+
+@app.get("/health/")
+async def health_ping():
+    return {"status": "ok", "service": "parser"}

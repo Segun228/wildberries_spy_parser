@@ -116,6 +116,12 @@ async def email_retrieve_update_destroy(request: Request):
         media_type="text/plain"
     )
 
+
+@app.get("/health/")
+async def health_ping():
+    return {"status": "ok", "service": "parser"}
+
+
 @app.get("/")
 async def ping(request: Request):
     build_log_message(
