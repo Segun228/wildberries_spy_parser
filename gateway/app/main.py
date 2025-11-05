@@ -28,6 +28,11 @@ SERVICES = {
     }
 }
 
+@app.get("/health")
+async def health_ping():
+    return {"status": "ok", "service": "parser"}
+
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def proxy_request(path: str, request: Request):
     """Основной прокси-роут"""
@@ -79,12 +84,9 @@ def filter_headers(headers: dict) -> dict:
             filtered[key] = value
     return filtered
 
+
 async def log_metrics(path: str, status_code: int, duration: float):
     """Логирование метрик"""
     print(f"Metrics: {path} | Status: {status_code} | Duration: {duration:.3f}s")
 
 
-
-@app.get("/health/")
-async def health_ping():
-    return {"status": "ok", "service": "parser"}

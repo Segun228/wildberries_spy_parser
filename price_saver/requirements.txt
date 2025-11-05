@@ -64,3 +64,6 @@ prometheus_client==0.23.1
 
 
 PyJWT==2.10.1
+
+clickhouse_driver
+confluent_kafka

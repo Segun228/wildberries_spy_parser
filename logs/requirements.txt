@@ -7,7 +7,8 @@ starlette==0.47.2
 clickhouse-connect==0.8.18
 psycopg2-binary==2.9.10
 redis==6.4.0
-
+clickhouse_driver
+confluent_kafka
 
 aiokafka==0.12.0
 
