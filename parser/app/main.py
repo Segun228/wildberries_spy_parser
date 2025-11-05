@@ -8,8 +8,8 @@ from .parsing import handle_parsing_request
 from dotenv import load_dotenv
 from fastapi import Response
 from prometheus_client import generate_latest, REGISTRY
-from .kafka_producer import build_log_message
-from .kafka_producer import ensure_topic_exists
+from .kafka_logs_producer import build_log_message
+from .kafka_logs_producer import ensure_topic_exists
 from prometheus_client import Counter, Histogram, generate_latest, REGISTRY
 
 load_dotenv()
